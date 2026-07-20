@@ -24,6 +24,14 @@ complexity — rework or drop it. No moving the goalposts after the fact.
   before the 90-day A/B runs; both runs use the same cap.
 - Order fill resolution must be **High (1 tick)** — Standard guesses the
   SL/TP intrabar sequence on 1-minute bars and inflates results.
+- Note (rework, 2026-07-20): added `MinActiveScore` regime gate (default
+  1.0) — no entries while the active candidate's bounce score is below the
+  threshold. Rationale: the 5-min tick-fill run (70 trades, PF 1.11) made
+  money only while bounces were confirming broadly (Jun 9-19) and bled in
+  the no-respect chop that followed; the engine's own score is the live
+  regime sensor and was unused for trade gating. Registered before any
+  run with the gate active. Risk noted: threshold chosen on the same
+  window is in-sample — verdict requires data outside it.
 
 ## Deployment preconditions
 

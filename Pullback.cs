@@ -107,6 +107,10 @@ namespace NinjaTrader.NinjaScript.Strategies
         [NinjaScriptProperty]
         [Display(Name = "Require warmup before trading", GroupName = "1. Calibration Engine", Order = 12)]
         public bool RequireWarmup { get; set; }
+
+        [NinjaScriptProperty, Range(-10, 10)]
+        [Display(Name = "Min active score to trade", GroupName = "1. Calibration Engine", Order = 13)]
+        public double MinActiveScore { get; set; }
         #endregion
 
         #region Parameters — 2. Trading
@@ -169,6 +173,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 TouchToleranceTicks = 4;  ConfirmBars = 3;  ConfirmTicks = 10;
                 LookbackHours = 3;  DecayHalfLifeMinutes = 60;  FailurePenalty = 0.5;
                 SwitchMarginPct = 20;  SwitchConfirmBars = 5;  RequireWarmup = true;
+                MinActiveScore = 1.0;
                 TrendSlopeBars = 10;  ContextMAPeriod = 200;
                 StopOffsetTicks = 2;  MinStopTicks = 6;  RewardMultiple = 1.5;
                 MaxStopTicks = 60;
@@ -407,6 +412,12 @@ namespace NinjaTrader.NinjaScript.Strategies
             }
             if (Position.MarketPosition != MarketPosition.Flat) return;
             if (_tradesToday >= MaxTradesPerDay) return;
+
+            // Regime gate: the engine's score is a live read of whether price is
+            // respecting ANY moving average. If even the best candidate isn't
+            // earning confirmed bounces lately, there is no pullback edge to
+            // trade — stand aside until bounces reappear.
+            if (_score[_active] < MinActiveScore) { _pbTouchBar = -1; return; }
 
             double m   = _ma[_active][0];
             double tol = TouchToleranceTicks * TickSize;
