@@ -230,7 +230,115 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         protected override void OnBarUpdate()
         {
-            // Engine + trading added in Tasks 2-4.
+            // All candidate MAs + slope lookback must have data.
+            if (CurrentBar < Math.Max(MaxPeriod, ContextMAPeriod) + TrendSlopeBars)
+                return;
+
+            if (_firstBarTime == DateTime.MinValue)
+                _firstBarTime = Time[0];
+
+            UpdateEngine();
+            // DrawState();   // Task 3
+            // TradeLogic();  // Task 4
+        }
+
+        private bool InWarmup()
+        {
+            return Time[0] < _firstBarTime.AddHours(LookbackHours);
+        }
+
+        private void UpdateEngine()
+        {
+            double tol     = TouchToleranceTicks * TickSize;
+            double confirm = ConfirmTicks * TickSize;
+
+            for (int i = 0; i < _n; i++)
+            {
+                double m = _ma[i][0];
+
+                // 1. Resolve a pending touch from an earlier bar.
+                if (_touchBar[i] >= 0 && _touchBar[i] < CurrentBar)
+                {
+                    bool confirmed = _touchIsLong[i]
+                        ? High[0] >= _touchClose[i] + confirm
+                        : Low[0]  <= _touchClose[i] - confirm;
+
+                    if (confirmed)
+                    { AddEvent(i, true);  _touchBar[i] = -1; }
+                    else if (CurrentBar - _touchBar[i] >= ConfirmBars)
+                    { AddEvent(i, false); _touchBar[i] = -1; }
+                }
+
+                // 2. Detect a new touch (one pending touch at a time per candidate).
+                if (_touchBar[i] < 0)
+                {
+                    bool longSide = Open[0] > m;          // price came from above → bullish touch
+                    bool touched  = longSide
+                        ? Low[0]  <= m + tol
+                        : High[0] >= m - tol;
+
+                    if (touched)
+                    {
+                        _touchBar[i]    = CurrentBar;
+                        _touchClose[i]  = Close[0];
+                        _touchIsLong[i] = longSide;
+                    }
+                }
+
+                // 3. Refresh score.
+                _score[i] = ComputeScore(i);
+            }
+
+            SelectActive();
+        }
+
+        private void AddEvent(int i, bool isBounce)
+        {
+            _events[i].Enqueue(new ScoreEvent { Time = Time[0], IsBounce = isBounce });
+        }
+
+        private double ComputeScore(int i)
+        {
+            Queue<ScoreEvent> q = _events[i];
+            DateTime cutoff = Time[0].AddHours(-LookbackHours);
+            while (q.Count > 0 && q.Peek().Time < cutoff)
+                q.Dequeue();
+
+            double s = 0;
+            foreach (ScoreEvent e in q)
+            {
+                double ageMin = (Time[0] - e.Time).TotalMinutes;
+                double w = Math.Pow(0.5, ageMin / DecayHalfLifeMinutes);
+                s += e.IsBounce ? w : -FailurePenalty * w;
+            }
+            return s;
+        }
+
+        private void SelectActive()
+        {
+            int best = 0;
+            for (int i = 1; i < _n; i++)
+                if (_score[i] > _score[best]) best = i;
+
+            if (best == _active || _score[best] <= 0)
+            { _challenger = -1; _challengerStreak = 0; return; }
+
+            // Challenger must beat the incumbent by the margin (incumbent floor 0
+            // so a positive challenger can dethrone a negative-scoring incumbent).
+            bool beats = _score[best] >
+                Math.Max(0, _score[_active]) * (1 + SwitchMarginPct / 100.0);
+            if (!beats)
+            { _challenger = -1; _challengerStreak = 0; return; }
+
+            if (best == _challenger) _challengerStreak++;
+            else { _challenger = best; _challengerStreak = 1; }
+
+            if (_challengerStreak >= SwitchConfirmBars)
+            {
+                _active = best;
+                _challenger = -1;
+                _challengerStreak = 0;
+            }
         }
     }
 }
