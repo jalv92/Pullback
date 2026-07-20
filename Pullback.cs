@@ -31,6 +31,9 @@ namespace NinjaTrader.NinjaScript.Strategies
         private bool[]            _isEma;
         private int               _n;
         private ISeries<double>   _contextMA;
+        // Wilder ATR computed by hand: nt8c cannot resolve the ATR() system
+        // indicator (known gotcha, same workaround as Apertura4HMSS).
+        private double            _atrVal;
 
         // ── Calibration engine state (Task 2) ──
         private struct ScoreEvent { public DateTime Time; public bool IsBounce; }
@@ -72,17 +75,24 @@ namespace NinjaTrader.NinjaScript.Strategies
         [Display(Name = "Candidate MA types", GroupName = "1. Calibration Engine", Order = 3)]
         public PullbackMAType CandidateTypes { get; set; }
 
-        [NinjaScriptProperty, Range(0, 20)]
-        [Display(Name = "Touch tolerance (ticks)", GroupName = "1. Calibration Engine", Order = 4)]
-        public int TouchToleranceTicks { get; set; }
+        // Touch/confirm distances are ATR fractions, not fixed ticks: a "bounce"
+        // must mean the same thing on 1-min and 5-min bars and across volatility
+        // regimes. Fixed ticks saturated the scores (every touch "confirmed").
+        [NinjaScriptProperty, Range(0.05, 2)]
+        [Display(Name = "Touch tolerance (ATR mult)", GroupName = "1. Calibration Engine", Order = 4)]
+        public double TouchToleranceATR { get; set; }
 
         [NinjaScriptProperty, Range(1, 20)]
         [Display(Name = "Confirm bars", GroupName = "1. Calibration Engine", Order = 5)]
         public int ConfirmBars { get; set; }
 
-        [NinjaScriptProperty, Range(1, 100)]
-        [Display(Name = "Confirm ticks", GroupName = "1. Calibration Engine", Order = 6)]
-        public int ConfirmTicks { get; set; }
+        [NinjaScriptProperty, Range(0.1, 5)]
+        [Display(Name = "Confirm distance (ATR mult)", GroupName = "1. Calibration Engine", Order = 6)]
+        public double ConfirmATR { get; set; }
+
+        [NinjaScriptProperty, Range(2, 100)]
+        [Display(Name = "ATR period", GroupName = "1. Calibration Engine", Order = 14)]
+        public int AtrPeriod { get; set; }
 
         [NinjaScriptProperty, Range(0.5, 24)]
         [Display(Name = "Lookback (hours)", GroupName = "1. Calibration Engine", Order = 7)]
@@ -170,7 +180,8 @@ namespace NinjaTrader.NinjaScript.Strategies
                 // Spec defaults
                 MinPeriod = 8;  MaxPeriod = 60;  PeriodStep = 4;
                 CandidateTypes = PullbackMAType.Both;
-                TouchToleranceTicks = 4;  ConfirmBars = 3;  ConfirmTicks = 10;
+                TouchToleranceATR = 0.25;  ConfirmBars = 3;  ConfirmATR = 0.75;
+                AtrPeriod = 14;
                 LookbackHours = 3;  DecayHalfLifeMinutes = 60;  FailurePenalty = 0.5;
                 SwitchMarginPct = 20;  SwitchConfirmBars = 5;  RequireWarmup = true;
                 MinActiveScore = 1.0;
@@ -243,6 +254,14 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         protected override void OnBarUpdate()
         {
+            if (CurrentBar < 1) return;
+
+            // Wilder ATR by hand (nt8c cannot resolve the ATR() system indicator).
+            // Updated from bar 1 so it is fully converged long before trading starts.
+            double tr = Math.Max(High[0] - Low[0],
+                        Math.Max(Math.Abs(High[0] - Close[1]), Math.Abs(Low[0] - Close[1])));
+            _atrVal = _atrVal == 0 ? tr : (_atrVal * (AtrPeriod - 1) + tr) / AtrPeriod;
+
             // All candidate MAs + slope lookback must have data.
             if (CurrentBar < Math.Max(MaxPeriod, ContextMAPeriod) + TrendSlopeBars)
                 return;
@@ -262,8 +281,8 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         private void UpdateEngine()
         {
-            double tol     = TouchToleranceTicks * TickSize;
-            double confirm = ConfirmTicks * TickSize;
+            double tol     = TouchToleranceATR * _atrVal;
+            double confirm = ConfirmATR * _atrVal;
 
             for (int i = 0; i < _n; i++)
             {
@@ -420,7 +439,7 @@ namespace NinjaTrader.NinjaScript.Strategies
             if (_score[_active] < MinActiveScore) { _pbTouchBar = -1; return; }
 
             double m   = _ma[_active][0];
-            double tol = TouchToleranceTicks * TickSize;
+            double tol = TouchToleranceATR * _atrVal;
 
             bool upTrend = _ma[_active][0] > _ma[_active][TrendSlopeBars]
                            && Close[0] > _contextMA[0];

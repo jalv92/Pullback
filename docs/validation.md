@@ -32,6 +32,15 @@ complexity — rework or drop it. No moving the goalposts after the fact.
   regime sensor and was unused for trade gating. Registered before any
   run with the gate active. Risk noted: threshold chosen on the same
   window is in-sample — verdict requires data outside it.
+- Note (root-cause fix, 2026-07-20): the gate at 1.0 blocked ZERO trades —
+  scores were saturated because bounce confirmation was 10 fixed ticks
+  (2.5 NQ points), sub-noise on 5-min bars: every touch "confirmed", every
+  MA always looked respected, selection and gating were uninformative.
+  Touch tolerance and confirm distance are now ATR fractions
+  (`TouchToleranceATR` 0.25, `ConfirmATR` 0.75, Wilder ATR(14) hand-computed)
+  so a "bounce" means the same thing on any timeframe/volatility regime.
+  This changes engine behavior on BOTH timeframes; prior runs are not
+  comparable to post-fix runs.
 
 ## Deployment preconditions
 
