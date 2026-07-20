@@ -239,7 +239,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 
             UpdateEngine();
             DrawState();
-            // TradeLogic();  // Task 4
+            TradeLogic();  // Task 4
         }
 
         private bool InWarmup()
@@ -360,6 +360,106 @@ namespace NinjaTrader.NinjaScript.Strategies
                 _period[_active],
                 InWarmup() ? "  (warmup)" : "");
             Draw.Text(this, "pbActiveLabel", label, 0, High[0] + 20 * TickSize, Brushes.White);
+        }
+
+        private bool InSession()
+        {
+            TimeSpan t = Time[0].TimeOfDay;
+            return t >= _sessStart && t <= _sessEnd;
+        }
+
+        private void Flatten()
+        {
+            if (Position.MarketPosition == MarketPosition.Long)  ExitLong();
+            if (Position.MarketPosition == MarketPosition.Short) ExitShort();
+        }
+
+        private void TradeLogic()
+        {
+            // Daily reset on the first bar of each session.
+            if (Bars.IsFirstBarOfSession)
+            {
+                _tradesToday     = 0;
+                _lockedOut       = false;
+                _sessionStartCum = SystemPerformance.AllTrades.TradesPerformance.Currency.CumProfit;
+                _pbTouchBar      = -1;
+            }
+
+            if (!InSession()) { Flatten(); _pbTouchBar = -1; return; }
+            if (RequireWarmup && InWarmup()) return;
+
+            // Daily guardrails (realized PnL only — open PnL rides on its SL/TP).
+            double dailyPnL = SystemPerformance.AllTrades.TradesPerformance.Currency.CumProfit
+                              - _sessionStartCum;
+            if (_lockedOut || dailyPnL <= -MaxDailyLossUSD)
+            {
+                if (!_lockedOut) { Flatten(); _lockedOut = true; }
+                return;
+            }
+            if (Position.MarketPosition != MarketPosition.Flat) return;
+            if (_tradesToday >= MaxTradesPerDay) return;
+
+            double m   = _ma[_active][0];
+            double tol = TouchToleranceTicks * TickSize;
+
+            bool upTrend = _ma[_active][0] > _ma[_active][TrendSlopeBars]
+                           && Close[0] > _contextMA[0];
+            bool downTrend = _ma[_active][0] < _ma[_active][TrendSlopeBars]
+                             && Close[0] < _contextMA[0];
+
+            // Pullback tracking is invalidated when the trend dies or times out.
+            if (_pbTouchBar >= 0)
+            {
+                bool trendAlive = _pbIsLong ? upTrend : downTrend;
+                if (!trendAlive || CurrentBar - _pbTouchBar > PullbackTimeoutBars)
+                    _pbTouchBar = -1;
+            }
+
+            // Start or extend pullback tracking on a touch of the active MA.
+            if (upTrend && Low[0] <= m + tol)
+            {
+                if (_pbTouchBar < 0 || !_pbIsLong)
+                { _pbTouchBar = CurrentBar; _pbExtreme = Low[0]; _pbIsLong = true; }
+                else
+                { _pbExtreme = Math.Min(_pbExtreme, Low[0]); }
+            }
+            else if (downTrend && High[0] >= m - tol)
+            {
+                if (_pbTouchBar < 0 || _pbIsLong)
+                { _pbTouchBar = CurrentBar; _pbExtreme = High[0]; _pbIsLong = false; }
+                else
+                { _pbExtreme = Math.Max(_pbExtreme, High[0]); }
+            }
+
+            if (_pbTouchBar < 0) return;
+
+            // Confirmation entry: rejection bar closes back on the trend side.
+            if (_pbIsLong && Close[0] > m)
+            {
+                double stop = _pbExtreme - StopOffsetTicks * TickSize;
+                double risk = Close[0] - stop;
+                double minRisk = MinStopTicks * TickSize;
+                if (risk < minRisk) { stop = Close[0] - minRisk; risk = minRisk; }
+
+                SetStopLoss("PB Long", CalculationMode.Price, stop, false);
+                SetProfitTarget("PB Long", CalculationMode.Price, Close[0] + RewardMultiple * risk);
+                EnterLong(1, "PB Long");
+                _tradesToday++;
+                _pbTouchBar = -1;
+            }
+            else if (!_pbIsLong && Close[0] < m)
+            {
+                double stop = _pbExtreme + StopOffsetTicks * TickSize;
+                double risk = stop - Close[0];
+                double minRisk = MinStopTicks * TickSize;
+                if (risk < minRisk) { stop = Close[0] + minRisk; risk = minRisk; }
+
+                SetStopLoss("PB Short", CalculationMode.Price, stop, false);
+                SetProfitTarget("PB Short", CalculationMode.Price, Close[0] - RewardMultiple * risk);
+                EnterShort(1, "PB Short");
+                _tradesToday++;
+                _pbTouchBar = -1;
+            }
         }
     }
 }
