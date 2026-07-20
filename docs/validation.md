@@ -1,5 +1,28 @@
 # Pullback — Validation Protocol & Results
 
+## FINAL VERDICT (2026-07-20): ARCHIVED — no edge
+
+Pre-registered kill criterion met: final configuration (5-min, tick fills,
+ATR-scaled engine, regime gate) scored **PF 1.06 over 75 trades** — below
+the PF ≥ 1.15 bar. Average trade $5.91 vs $5.76 commission: the strategy
+trades to pay commissions.
+
+The iteration sequence isolated the cause by elimination. Fill model fixed
+(tick), stop tail amputated (MaxStopTicks), timeframe escalated (1-min →
+5-min), engine sensor fixed (ATR-scaled bounces) — each step removed a
+failure mode and flattened the equity curve without lifting it. What
+remains is the core signal: **MA-touch + close-back carries no predictive
+information on intraday NQ** in the tested regime. Longs lost money in all
+five configurations tested; the short-side profit is indistinguishable
+from short exposure in a bearish summer.
+
+Reusable pieces for future strategies: the ATR-scaled bounce-scoring
+engine, the MinActiveScore regime gate, the structural-stop cap, and this
+pre-registered validation protocol. A revival should redesign the SIGNAL
+(confluence: day structure, prior swings, volume), not the parameters.
+
+---
+
 ## Pre-registered honesty rule (committed BEFORE seeing results)
 
 Run B (engine active) must beat Run A (frozen SMA 20 baseline) on net

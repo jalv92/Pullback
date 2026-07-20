@@ -1,5 +1,14 @@
 # Pullback
 
+> **⚠️ ARCHIVED (2026-07-20) — validated negative result.** After honest
+> iteration (tick fills, structural-stop cap, 1-min → 5-min, ATR-scaled
+> bounce engine, regime gate), the final configuration scored PF 1.06 over
+> 75 trades with avg. trade ≈ commission: the MA-touch + close-back entry
+> signal carries no predictive edge on intraday NQ. Full verdict and the
+> pre-registered protocol in [`docs/validation.md`](docs/validation.md).
+> The ATR-scaled calibration engine, regime gate, and stop cap are sound,
+> reusable pieces — a revival should redesign the signal, not parameters.
+
 NinjaTrader 8 strategy: trades pullbacks to a **self-calibrating moving
 average**. Instead of a fixed period, a deterministic engine scores every
 candidate MA (SMA/EMA, periods 8-60) by how many *confirmed bounces* price
