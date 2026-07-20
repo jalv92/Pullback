@@ -24,6 +24,9 @@ complexity — rework or drop it. No moving the goalposts after the fact.
   Use CME US Index Futures RTH (opens 09:30 ET) or equivalent.
 - Daily-loss lockout counts REALIZED PnL only (by design): worst case the
   day's loss overshoots MaxDailyLossUSD by one structural stop.
+- Note (pre-validation fix, 2026-07-20): an engine MA switch now discards any
+  pending pullback tracking (`_pbTouchBar` reset), so entries always use stop
+  structure from the MA they were signaled on. Registered before any run.
 
 ## Run A — Baseline (calibration frozen)
 

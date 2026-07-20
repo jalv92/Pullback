@@ -186,6 +186,9 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         private void BuildCandidates()
         {
+            // Guard: a typo like Min=20/Max=2 would yield an empty pool and crash later.
+            if (MaxPeriod < MinPeriod) MaxPeriod = MinPeriod;
+
             var periods = new List<int>();
             for (int p = MinPeriod; p <= MaxPeriod; p += PeriodStep)
                 periods.Add(p);
@@ -348,6 +351,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 _active = best;
                 _challenger = -1;
                 _challengerStreak = 0;
+                _pbTouchBar = -1;   // a switch discards any pending pullback; re-arm on the new MA
             }
         }
 
