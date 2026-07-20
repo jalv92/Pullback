@@ -129,6 +129,10 @@ namespace NinjaTrader.NinjaScript.Strategies
         [NinjaScriptProperty, Range(0.1, 10)]
         [Display(Name = "Reward multiple (R)", GroupName = "2. Trading", Order = 4)]
         public double RewardMultiple { get; set; }
+
+        [NinjaScriptProperty, Range(10, 1000)]
+        [Display(Name = "Max stop (ticks)", GroupName = "2. Trading", Order = 5)]
+        public int MaxStopTicks { get; set; }
         #endregion
 
         #region Parameters — 3. Risk & Session
@@ -167,6 +171,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 SwitchMarginPct = 20;  SwitchConfirmBars = 5;  RequireWarmup = true;
                 TrendSlopeBars = 10;  ContextMAPeriod = 200;
                 StopOffsetTicks = 2;  MinStopTicks = 6;  RewardMultiple = 1.5;
+                MaxStopTicks = 60;
                 SessionStartTime = "09:35";  SessionEndTime = "15:45";
                 MaxTradesPerDay = 6;  MaxDailyLossUSD = 1000;
 
@@ -445,6 +450,10 @@ namespace NinjaTrader.NinjaScript.Strategies
                 double minRisk = MinStopTicks * TickSize;
                 if (risk < minRisk) { stop = Close[0] - minRisk; risk = minRisk; }
 
+                // Stop cap: a pullback so deep that the structural stop exceeds the
+                // cap is a low-quality, over-extended setup — skip it entirely.
+                if (risk > MaxStopTicks * TickSize) { _pbTouchBar = -1; return; }
+
                 SetStopLoss("PB Long", CalculationMode.Price, stop, false);
                 SetProfitTarget("PB Long", CalculationMode.Price, Close[0] + RewardMultiple * risk);
                 EnterLong(1, "PB Long");
@@ -457,6 +466,9 @@ namespace NinjaTrader.NinjaScript.Strategies
                 double risk = stop - Close[0];
                 double minRisk = MinStopTicks * TickSize;
                 if (risk < minRisk) { stop = Close[0] + minRisk; risk = minRisk; }
+
+                // Stop cap: mirror of the long-side quality filter.
+                if (risk > MaxStopTicks * TickSize) { _pbTouchBar = -1; return; }
 
                 SetStopLoss("PB Short", CalculationMode.Price, stop, false);
                 SetProfitTarget("PB Short", CalculationMode.Price, Close[0] - RewardMultiple * risk);

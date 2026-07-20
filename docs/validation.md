@@ -17,6 +17,13 @@ complexity — rework or drop it. No moving the goalposts after the fact.
 - Note (pre-validation fix, 2026-07-20): an engine MA switch now discards any
   pending pullback tracking (`_pbTouchBar` reset), so entries always use stop
   structure from the MA they were signaled on. Registered before any run.
+- Note (rework, 2026-07-20): first 28-day default run (77 trades) failed —
+  PF 0.77, net -$9,193, with single losses up to $2,325 from uncapped
+  structural stops. Added `MaxStopTicks` (default 60): setups whose
+  structural stop exceeds the cap are skipped as over-extended. Registered
+  before the 90-day A/B runs; both runs use the same cap.
+- Order fill resolution must be **High (1 tick)** — Standard guesses the
+  SL/TP intrabar sequence on 1-minute bars and inflates results.
 
 ## Deployment preconditions
 
