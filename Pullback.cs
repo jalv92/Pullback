@@ -238,7 +238,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 _firstBarTime = Time[0];
 
             UpdateEngine();
-            // DrawState();   // Task 3
+            DrawState();
             // TradeLogic();  // Task 4
         }
 
@@ -295,6 +295,16 @@ namespace NinjaTrader.NinjaScript.Strategies
         private void AddEvent(int i, bool isBounce)
         {
             _events[i].Enqueue(new ScoreEvent { Time = Time[0], IsBounce = isBounce });
+
+            // Visual audit trail: mark scored events of the ACTIVE candidate only.
+            if (i == _active)
+            {
+                Brush b = isBounce ? Brushes.LimeGreen : Brushes.OrangeRed;
+                double y = _touchIsLong[i]
+                    ? Low[0]  - 8 * TickSize
+                    : High[0] + 8 * TickSize;
+                Draw.Dot(this, "pbEvt" + CurrentBar + "_" + i, false, 0, y, b);
+            }
         }
 
         private double ComputeScore(int i)
@@ -339,6 +349,17 @@ namespace NinjaTrader.NinjaScript.Strategies
                 _challenger = -1;
                 _challengerStreak = 0;
             }
+        }
+
+        private void DrawState()
+        {
+            Values[0][0] = _ma[_active][0];
+
+            string label = string.Format("{0} {1}{2}",
+                _isEma[_active] ? "EMA" : "SMA",
+                _period[_active],
+                InWarmup() ? "  (warmup)" : "");
+            Draw.Text(this, "pbActiveLabel", label, 0, High[0] + 20 * TickSize, Brushes.White);
         }
     }
 }
